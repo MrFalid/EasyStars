@@ -181,19 +181,20 @@
   localStorage.removeItem('easy_stars_state');
 
   // === State ===
+  const MIN_WITHDRAW = 50; // <--- МИНИМАЛЬНАЯ СУММА ДЛЯ ВЫВОДА
+
   const DEFAULT_STATE = {
     balance: 0,
     totalEarned: 0,
     totalTaps: 0,
-    perTap: 0.25,       // 0.25 за клик
-    energy: 40,         // 40 энергии
-    maxEnergy: 40,      // 40 энергии
+    perTap: 0.25,
+    energy: 40,
+    maxEnergy: 40,
     tapLevel: 1,
     energyLevel: 1,
   };
   let state = { ...DEFAULT_STATE };
 
-  // Load from localStorage
   try {
     const saved = localStorage.getItem('easy_stars_state');
     if (saved) state = { ...state, ...JSON.parse(saved) };
@@ -283,9 +284,10 @@
     els.statTotal.textContent = formatNum(state.totalEarned);
     els.statTaps.textContent = state.totalTaps;
     
-    // Кнопки вывода теперь ВСЕГДА активны (убрано условие balance >= 100)
-    els.withdraw.disabled = false;
-    els.withdrawProfile.disabled = false;
+    // Кнопки вывода активны только при балансе от 50 звёзд
+    const canWithdraw = state.balance >= MIN_WITHDRAW;
+    els.withdraw.disabled = !canWithdraw;
+    els.withdrawProfile.disabled = !canWithdraw;
     
     renderShop();
   }
@@ -296,17 +298,14 @@
   els.coin.addEventListener('pointerdown', (e) => {
     if (isCooldown || state.energy <= 0) return;
     
-    // Начисление
     state.energy--;
     state.balance += state.perTap;
     state.totalEarned += state.perTap;
     state.totalTaps++;
     
-    // Визуальный отклик
     els.coin.classList.add('pressed');
     setTimeout(() => els.coin.classList.remove('pressed'), 80);
 
-    // Всплывающий текст
     const wrapRect = els.coinWrap.getBoundingClientRect();
     const x = e.clientX - wrapRect.left - 15;
     const y = e.clientY - wrapRect.top - 30;
@@ -318,7 +317,6 @@
     els.coinWrap.appendChild(f);
     setTimeout(() => f.remove(), 800);
 
-    // Кулдаун 2 сек
     isCooldown = true;
     els.coin.classList.add('cooldown');
     els.cooldownText.style.display = 'block';
@@ -347,7 +345,7 @@
       state.energy = Math.min(state.maxEnergy, state.energy + 1);
       render();
     }
-  }, 2000); // 1 энергия в 2 секунды
+  }, 2000);
 
   // === Navigation ===
   document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -368,7 +366,8 @@
 
   // === Withdraw Modal ===
   function openWithdrawModal() {
-    // Убрана проверка balance < 100, теперь модалка открывается всегда
+    // Защита от вызова, если звёзд меньше 50
+    if (state.balance < MIN_WITHDRAW) return;
     els.modalText.textContent = `Вывести ${formatNum(state.balance)} ⭐ на баланс Telegram?`;
     els.modal.classList.add('active');
   }
@@ -385,14 +384,11 @@
     const startParam = 'withdraw';
     const url = `https://t.me/${botUsername}?start=${startParam}`;
 
-    // Открываем Telegram-бота
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(url);
     } else {
       window.open(url, '_blank');
     }
-
-    // Баланс НЕ обнуляем — бот/сервер сам спишет звёзды
   });
 
   // === Init ===
@@ -400,4 +396,4 @@
   save();
 </script>
 </body>
-                                   </html>
+</html>
