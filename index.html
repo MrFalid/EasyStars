@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Easy Stars</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #17212b; --panel: #1f2c3a; --accent: #5288c1; --accent-dark: #3b6da5;
+    --text: #f5f5f5; --muted: #7f91a4; --gold: #ffcf3f; --green: #4ade80; --red: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100dvh; max-width: 480px; margin: 0 auto; padding-top: env(safe-area-inset-top, 0); background: var(--bg); position: relative; }
+
+  /* Header */
+  header { padding: 16px 16px 8px; text-align: center; flex-shrink: 0; }
+  .balance { font-size: 42px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .balance span { color: var(--gold); text-shadow: 0 0 12px rgba(255,207,63,0.4); }
+  .per-tap { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .energy { margin-top: 10px; }
+  .energy-top { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .bar { height: 10px; background: var(--panel); border-radius: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--accent), #7ab8ff); border-radius: 6px; transition: width 0.2s; }
+
+  /* Main */
+  main { flex: 1; position: relative; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; }
+  .screen { display: none; flex: 1; padding: 12px 16px 100px; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* Tap Screen */
+  #screen-tap { align-items: center; justify-content: center; gap: 20px; }
+  .coin-wrap { position: relative; width: min(58vw, 230px); aspect-ratio: 1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .coin { width: 100%; height: 100%; border-radius: 50%; border: 0; cursor: pointer; font-size: min(28vw, 110px); line-height: 1;
+    background: radial-gradient(circle at 35% 30%, #35516d, #1f2c3a 70%);
+    box-shadow: 0 0 0 6px rgba(82,136,193,0.25), 0 14px 40px rgba(0,0,0,0.5);
+    transition: transform 0.08s ease, opacity 0.2s; touch-action: manipulation; position: relative; z-index: 2; 
+    display: flex; align-items: center; justify-content: center; }
+  .coin.cooldown { opacity: 0.5; pointer-events: none; filter: grayscale(0.5); }
+  .coin.pressed { transform: scale(0.92); }
+  
+  /* Индикатор задержки */
+  .cooldown-text { position: absolute; font-size: 24px; font-weight: 800; color: #fff; z-index: 5; pointer-events: none; text-shadow: 0 2px 10px #000; display: none; }
+
+  .float { position: absolute; font-weight: 800; font-size: 26px; color: var(--gold); pointer-events: none; animation: rise 0.8s ease-out forwards; z-index: 10; text-shadow: 0 2px 8px #000; }
+  @keyframes rise { to { transform: translateY(-90px); opacity: 0; } }
+
+  /* Shop */
+  .shop-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+  .shop-item { background: var(--panel); border-radius: 16px; padding: 16px; display: flex; justify-content: space-between; align-items: center; border: 1px solid transparent; transition: border-color 0.2s; }
+  .shop-item.unlocked { border-color: var(--green); }
+  .shop-info h4 { font-size: 16px; margin-bottom: 4px; }
+  .shop-info p { font-size: 13px; color: var(--muted); }
+  .shop-buy { background: var(--accent); color: #fff; border: 0; padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: transform 0.1s; }
+  .shop-buy:active { transform: scale(0.95); }
+  .shop-buy[disabled] { background: var(--accent-dark); opacity: 0.5; cursor: default; }
+
+  /* Nav */
+  nav { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(31,44,58,0.95); backdrop-filter: blur(10px); display: flex; justify-content: space-around; padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.05); z-index: 100; }
+  .nav-btn { background: none; border: 0; color: var(--muted); font-size: 12px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; flex: 1; transition: color 0.2s; padding: 4px 0; }
+  .nav-btn .icon { font-size: 20px; }
+  .nav-btn.active { color: var(--accent); }
+
+  /* Modal */
+  .modal-bg { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; }
+  .modal-bg.active { display: flex; }
+  .modal { background: var(--panel); border-radius: 16px; padding: 24px; width: 100%; max-width: 320px; text-align: center; }
+  .modal h3 { margin-bottom: 12px; font-size: 18px; }
+  .modal p { color: var(--muted); font-size: 14px; margin-bottom: 20px; line-height: 1.4; }
+  .modal .btn-group { display: flex; gap: 10px; }
+  .modal .btn { flex: 1; padding: 12px; border-radius: 10px; border: 0; font-weight: 600; cursor: pointer; }
+  .modal .btn-secondary { background: var(--accent-dark); color: #fff; }
+  .modal .btn-primary { background: var(--gold); color: #000; }
+
+  main::-webkit-scrollbar { width: 0; }
+
+  /* Кнопка вывода под монетой */
+  #withdraw { 
+    width: 100%; 
+    max-width: 280px; 
+    background: var(--gold); 
+    color: #000; 
+    font-weight: 800; 
+    font-size: 16px;
+    padding: 16px;
+    border-radius: 14px;
+    border: 0;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255,207,63,0.3);
+    transition: transform 0.1s;
+  }
+  #withdraw:active { transform: scale(0.95); }
+  #withdraw[disabled] { background: var(--panel); color: var(--muted); box-shadow: none; cursor: default; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <header>
+    <div class="balance">⭐ <span id="balance">0</span></div>
+    <div class="per-tap">За тап: <span id="per-tap">0.25</span> ⭐</div>
+    <div class="energy">
+      <div class="energy-top"><span>Энергия</span><span id="energy-text">40/40</span></div>
+      <div class="bar"><i id="energy-bar"></i></div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Screen: Tap -->
+    <section class="screen active" id="screen-tap">
+      <div class="coin-wrap">
+        <button class="coin" id="coin">
+          <span style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">⭐</span>
+        </button>
+        <div class="cooldown-text" id="cooldown-text">2s</div>
+      </div>
+      <button id="withdraw">Вывести звёзды</button>
+    </section>
+
+    <!-- Screen: Shop -->
+    <section class="screen" id="screen-shop">
+      <h2 style="font-size: 20px; margin-bottom: 8px;">Магазин улучшений</h2>
+      <p style="color: var(--muted); font-size: 14px; margin-bottom: 16px;">Увеличивай доход за тап и максимум энергии</p>
+      <div class="shop-list"></div>
+    </section>
+
+    <!-- Screen: Profile -->
+    <section class="screen" id="screen-profile">
+      <div style="background: var(--panel); border-radius: 16px; padding: 24px; text-align: center; margin-top: 20px;">
+        <div style="width: 80px; height: 80px; background: var(--accent); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 40px;">👤</div>
+        <h3 id="profile-name" style="margin-bottom: 4px;">User</h3>
+        <p id="profile-id" style="color: var(--muted); font-size: 13px; margin-bottom: 24px;">@user</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left;">
+          <div style="background: var(--bg); padding: 12px; border-radius: 10px;">
+            <div style="font-size: 12px; color: var(--muted);">Всего звёзд</div>
+            <div style="font-size: 20px; font-weight: 700;">⭐ <span id="stat-total">0</span></div>
+          </div>
+          <div style="background: var(--bg); padding: 12px; border-radius: 10px;">
+            <div style="font-size: 12px; color: var(--muted);">Всего тапов</div>
+            <div style="font-size: 20px; font-weight: 700;" id="stat-taps">0</div>
+          </div>
+        </div>
+      </div>
+      <button class="btn" id="withdraw-profile" style="margin-top: 20px; background: var(--gold); color: #000; border: 0; padding: 16px; border-radius: 14px; font-weight: 800; font-size: 16px;">Вывести звёзды</button>
+    </section>
+  </main>
+
+  <!-- Navigation -->
+  <nav>
+    <button class="nav-btn active" data-tab="tap"><span class="icon">👆</span>Тап</button>
+    <button class="nav-btn" data-tab="shop"><span class="icon">🛒</span>Магазин</button>
+    <button class="nav-btn" data-tab="profile"><span class="icon">👤</span>Профиль</button>
+  </nav>
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="modal-title">Вывод звёзд</h3>
+    <p id="modal-text">Вы уверены, что хотите вывести все звёзды?</p>
+    <div class="btn-group">
+      <button class="btn btn-secondary" id="modal-cancel">Отмена</button>
+      <button class="btn btn-primary" id="modal-ok">Вывести</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // === Telegram Init ===
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor('#17212b');
+    tg.setBackgroundColor('#17212b');
+  }
+
+  // === Сброс старого кэша (чтобы применились новые настройки) ===
+  localStorage.removeItem('easy_stars_state');
+
+  // === State ===
+  const DEFAULT_STATE = {
+    balance: 0,
+    totalEarned: 0,
+    totalTaps: 0,
+    perTap: 0.25,       // 0.25 за клик
+    energy: 40,         // 40 энергии
+    maxEnergy: 40,      // 40 энергии
+    tapLevel: 1,
+    energyLevel: 1,
+  };
+  let state = { ...DEFAULT_STATE };
+
+  // Load from localStorage
+  try {
+    const saved = localStorage.getItem('easy_stars_state');
+    if (saved) state = { ...state, ...JSON.parse(saved) };
+  } catch (e) {}
+
+  function save() {
+    try { localStorage.setItem('easy_stars_state', JSON.stringify(state)); } catch (e) {}
+  }
+
+  // === Elements ===
+  const els = {
+    balance: document.getElementById('balance'),
+    perTap: document.getElementById('per-tap'),
+    energyText: document.getElementById('energy-text'),
+    energyBar: document.getElementById('energy-bar'),
+    coin: document.getElementById('coin'),
+    coinWrap: document.querySelector('.coin-wrap'),
+    cooldownText: document.getElementById('cooldown-text'),
+    withdraw: document.getElementById('withdraw'),
+    withdrawProfile: document.getElementById('withdraw-profile'),
+    shopList: document.querySelector('.shop-list'),
+    profileName: document.getElementById('profile-name'),
+    profileId: document.getElementById('profile-id'),
+    statTotal: document.getElementById('stat-total'),
+    statTaps: document.getElementById('stat-taps'),
+    modal: document.getElementById('modal'),
+    modalTitle: document.getElementById('modal-title'),
+    modalText: document.getElementById('modal-text'),
+    modalOk: document.getElementById('modal-ok'),
+    modalCancel: document.getElementById('modal-cancel'),
+  };
+
+  // === Shop Items ===
+  const SHOP_ITEMS = [
+    { key: 'tapLevel', title: 'Мульти-тап', desc: '+0.25 ⭐ за тап', baseCost: 50, multiplier: 1.6, stat: 'perTap', amount: 0.25 },
+    { key: 'energyLevel', title: 'Лимит энергии', desc: '+10 к макс. энергии', baseCost: 100, multiplier: 1.5, stat: 'maxEnergy', amount: 10 },
+  ];
+
+  function getCost(item) {
+    return Math.floor(item.baseCost * Math.pow(item.multiplier, state[item.key] - 1));
+  }
+
+  function renderShop() {
+    els.shopList.innerHTML = '';
+    SHOP_ITEMS.forEach(item => {
+      const lvl = state[item.key];
+      const cost = getCost(item);
+      const canAfford = state.balance >= cost;
+
+      const div = document.createElement('div');
+      div.className = 'shop-item';
+      div.innerHTML = `
+        <div class="shop-info">
+          <h4>${item.title} <span style="color:var(--accent);font-size:13px;">Lv.${lvl}</span></h4>
+          <p>${item.desc}</p>
+        </div>
+        <button class="shop-buy" ${canAfford ? '' : 'disabled'}>⭐ ${cost}</button>
+      `;
+      div.querySelector('.shop-buy').addEventListener('click', () => {
+        if (state.balance >= cost) {
+          state.balance -= cost;
+          state[item.key]++;
+          if (item.stat === 'perTap') state.perTap += item.amount;
+          if (item.stat === 'maxEnergy') {
+            state.maxEnergy += item.amount;
+            state.energy = state.maxEnergy;
+          }
+          render();
+          save();
+        }
+      });
+      els.shopList.appendChild(div);
+    });
+  }
+
+  // === Formatting Helpers ===
+  function formatNum(n) {
+    return Number.isInteger(n) ? n.toString() : n.toFixed(2);
+  }
+
+  // === Render ===
+  function render() {
+    els.balance.textContent = formatNum(state.balance);
+    els.perTap.textContent = formatNum(state.perTap);
+    els.energyText.textContent = `${state.energy}/${state.maxEnergy}`;
+    els.energyBar.style.width = `${(state.energy / state.maxEnergy) * 100}%`;
+    els.statTotal.textContent = formatNum(state.totalEarned);
+    els.statTaps.textContent = state.totalTaps;
+    
+    // Кнопки вывода теперь ВСЕГДА активны (убрано условие balance >= 100)
+    els.withdraw.disabled = false;
+    els.withdrawProfile.disabled = false;
+    
+    renderShop();
+  }
+
+  // === Tap Logic ===
+  let isCooldown = false;
+
+  els.coin.addEventListener('pointerdown', (e) => {
+    if (isCooldown || state.energy <= 0) return;
+    
+    // Начисление
+    state.energy--;
+    state.balance += state.perTap;
+    state.totalEarned += state.perTap;
+    state.totalTaps++;
+    
+    // Визуальный отклик
+    els.coin.classList.add('pressed');
+    setTimeout(() => els.coin.classList.remove('pressed'), 80);
+
+    // Всплывающий текст
+    const wrapRect = els.coinWrap.getBoundingClientRect();
+    const x = e.clientX - wrapRect.left - 15;
+    const y = e.clientY - wrapRect.top - 30;
+    const f = document.createElement('div');
+    f.className = 'float';
+    f.textContent = `+${formatNum(state.perTap)}`;
+    f.style.left = x + 'px';
+    f.style.top = y + 'px';
+    els.coinWrap.appendChild(f);
+    setTimeout(() => f.remove(), 800);
+
+    // Кулдаун 2 сек
+    isCooldown = true;
+    els.coin.classList.add('cooldown');
+    els.cooldownText.style.display = 'block';
+    
+    let timeLeft = 2.0;
+    els.cooldownText.textContent = timeLeft.toFixed(1) + 's';
+    
+    const cdInterval = setInterval(() => {
+      timeLeft -= 0.1;
+      if (timeLeft <= 0) {
+        clearInterval(cdInterval);
+        isCooldown = false;
+        els.coin.classList.remove('cooldown');
+        els.cooldownText.style.display = 'none';
+      } else {
+        els.cooldownText.textContent = timeLeft.toFixed(1) + 's';
+      }
+    }, 100);
+
+    render();
+  });
+
+  // === Energy Regen ===
+  setInterval(() => {
+    if (state.energy < state.maxEnergy) {
+      state.energy = Math.min(state.maxEnergy, state.energy + 1);
+      render();
+    }
+  }, 2000); // 1 энергия в 2 секунды
+
+  // === Navigation ===
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('screen-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // === Profile Init ===
+  if (tg?.initDataUnsafe?.user) {
+    const u = tg.initDataUnsafe.user;
+    els.profileName.textContent = u.first_name + (u.last_name ? ' ' + u.last_name : '');
+    els.profileId.textContent = u.username ? '@' + u.username : 'id: ' + u.id;
+  }
+
+  // === Withdraw Modal ===
+  function openWithdrawModal() {
+    // Убрана проверка balance < 100, теперь модалка открывается всегда
+    els.modalText.textContent = `Вывести ${formatNum(state.balance)} ⭐ на баланс Telegram?`;
+    els.modal.classList.add('active');
+  }
+
+  els.withdraw.addEventListener('click', openWithdrawModal);
+  els.withdrawProfile.addEventListener('click', openWithdrawModal);
+  
+  els.modalCancel.addEventListener('click', () => els.modal.classList.remove('active'));
+
+  els.modalOk.addEventListener('click', () => {
+    els.modal.classList.remove('active');
+
+    const botUsername = 'lTapTaplBot';
+    const startParam = 'withdraw';
+    const url = `https://t.me/${botUsername}?start=${startParam}`;
+
+    // Открываем Telegram-бота
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(url);
+    } else {
+      window.open(url, '_blank');
+    }
+
+    // Баланс НЕ обнуляем — бот/сервер сам спишет звёзды
+  });
+
+  // === Init ===
+  render();
+  save();
+</script>
+</body>
+                                   </html>
